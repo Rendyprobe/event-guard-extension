@@ -491,27 +491,62 @@
                 ".cta-button",
                 ".root-component-container",
                 ".test-theme-waiting",
-                "button.cta-button",
-                "div.w-full.h-full",
-                "div.app-content",
-                "div.flex.flex-row.w-full.h-full",
-                "div[class*=fullscreen]",
-                "div[class*=full-screen]"
+                ".w-full.h-full",
+                ".app-content",
+                ".flex.flex-row.w-full.h-full",
+                "[class*=fullscreen]",
+                "[class*=full-screen]"
               ];
               const nodes = new Set();
               selectors.forEach((sel) => document.querySelectorAll(sel).forEach((el) => nodes.add(el)));
+
+              const shouldHide = (el) => {
+                const txt = (el.innerText || "").toLowerCase();
+                if (txt.includes("layar penuh")) return true;
+                if (txt.includes("full screen")) return true;
+                return false;
+              };
+
+              const visit = (root) => {
+                if (!root) return;
+                const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+                let node = walker.currentNode;
+                while (node) {
+                  const el = node;
+                  if (shouldHide(el)) nodes.add(el);
+                  if (el.shadowRoot) visit(el.shadowRoot);
+                  node = walker.nextNode();
+                }
+              };
+              visit(document);
+
+              let clicked = false;
               Array.from(nodes).forEach((el) => {
                 el.style.setProperty("display", "none", "important");
                 el.style.setProperty("visibility", "hidden", "important");
                 el.style.setProperty("opacity", "0", "important");
-              });
-              const textCandidates = Array.from(document.querySelectorAll("div,section,article,button"));
-              textCandidates.forEach((el) => {
+                el.style.setProperty("pointer-events", "none", "important");
                 const txt = (el.innerText || "").toLowerCase();
-                if (txt.includes("layar penuh")) {
-                  el.style.setProperty("display", "none", "important");
-                  el.style.setProperty("visibility", "hidden", "important");
-                  el.style.setProperty("opacity", "0", "important");
+                if (!clicked && el.tagName === "BUTTON" && txt.includes("layar penuh")) {
+                  try {
+                    el.click();
+                    clicked = true;
+                  } catch (_) {
+                    /* ignore */
+                  }
+                }
+                const parent = el.parentElement;
+                if (parent && (parent.className || "").toString().includes("modal")) {
+                  parent.style.setProperty("display", "none", "important");
+                  parent.style.setProperty("visibility", "hidden", "important");
+                  parent.style.setProperty("opacity", "0", "important");
+                  parent.style.setProperty("pointer-events", "none", "important");
+                  if (parent.parentElement) {
+                    parent.parentElement.style.setProperty("display", "none", "important");
+                    parent.parentElement.style.setProperty("visibility", "hidden", "important");
+                    parent.parentElement.style.setProperty("opacity", "0", "important");
+                    parent.parentElement.style.setProperty("pointer-events", "none", "important");
+                  }
                 }
               });
             } catch (_) {
