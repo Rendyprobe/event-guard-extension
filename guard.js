@@ -253,6 +253,38 @@
           };
           spoofFullscreen();
 
+          const spoofViewport = () => {
+            try {
+              const width = screen?.width || window.innerWidth || 1920;
+              const height = screen?.height || window.innerHeight || 1080;
+              const setWin = (prop, val) => {
+                try {
+                  Object.defineProperty(window, prop, { configurable: true, get: () => val });
+                } catch (_) {
+                  /* ignore */
+                }
+              };
+              const setScreen = (prop, val) => {
+                try {
+                  Object.defineProperty(screen, prop, { configurable: true, get: () => val });
+                } catch (_) {
+                  /* ignore */
+                }
+              };
+              setWin("innerHeight", height);
+              setWin("outerHeight", height);
+              setWin("innerWidth", width);
+              setWin("outerWidth", width);
+              setScreen("availHeight", height);
+              setScreen("availWidth", width);
+              setScreen("height", height);
+              setScreen("width", width);
+            } catch (_) {
+              /* ignore */
+            }
+          };
+          spoofViewport();
+
           setConst(Document.prototype, "hidden", false);
           setConst(document, "hidden", false);
           setConst(Document.prototype, "visibilityState", "visible");
