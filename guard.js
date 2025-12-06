@@ -132,7 +132,7 @@
       const setConst = (target, prop, value) => {
         try {
           Object.defineProperty(target, prop, {
-            configurable: false,
+            configurable: true,
             enumerable: false,
             get: () => value,
             set: () => undefined
@@ -204,38 +204,54 @@
 
       const applyForceVisible = () => {
         try {
-          const disableFullscreen = () => {
+          const spoofFullscreen = () => {
             try {
-              const noop = () => undefined;
+              const fakeElement = document.documentElement || document.body || document;
+              const spoofState = () => {
+                setConst(Document.prototype, "fullscreenEnabled", true);
+                setConst(document, "fullscreenEnabled", true);
+                setConst(Document.prototype, "fullscreenElement", fakeElement);
+                setConst(document, "fullscreenElement", fakeElement);
+                try {
+                  document.dispatchEvent(new Event("fullscreenchange"));
+                } catch (_) {
+                  /* ignore */
+                }
+              };
               const fsProps = [
                 "requestFullscreen",
                 "webkitRequestFullscreen",
                 "mozRequestFullScreen",
                 "msRequestFullscreen"
               ];
+              const fakeRequest = function () {
+                spoofState();
+                return Promise.resolve();
+              };
               fsProps.forEach((p) => {
                 if (Element.prototype[p]) {
-                  lockMethod(Element.prototype, p, noop);
+                  lockMethod(Element.prototype, p, fakeRequest);
                 }
                 if (document[p]) {
-                  lockMethod(document, p, noop);
+                  lockMethod(document, p, fakeRequest);
                 }
               });
               const exitProps = ["exitFullscreen", "webkitExitFullscreen", "mozCancelFullScreen", "msExitFullscreen"];
+              const fakeExit = () => {
+                spoofState();
+                return Promise.resolve();
+              };
               exitProps.forEach((p) => {
                 if (document[p]) {
-                  lockMethod(document, p, () => undefined);
+                  lockMethod(document, p, fakeExit);
                 }
               });
-              setConst(Document.prototype, "fullscreenEnabled", false);
-              setConst(document, "fullscreenEnabled", false);
-              setConst(Document.prototype, "fullscreenElement", null);
-              setConst(document, "fullscreenElement", null);
+              spoofState();
             } catch (_) {
               /* ignore */
             }
           };
-          disableFullscreen();
+          spoofFullscreen();
 
           setConst(Document.prototype, "hidden", false);
           setConst(document, "hidden", false);
