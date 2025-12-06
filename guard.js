@@ -226,6 +226,22 @@
               setGetter(document, "fullscreenElement", () => (fullscreenState.active ? fullscreenState.el : null));
               setConst(Document.prototype, "fullscreenEnabled", true);
               setConst(document, "fullscreenEnabled", true);
+              setGetter(Document.prototype, "webkitFullscreenElement", () =>
+                fullscreenState.active ? fullscreenState.el : null
+              );
+              setGetter(document, "webkitFullscreenElement", () =>
+                fullscreenState.active ? fullscreenState.el : null
+              );
+              setGetter(Document.prototype, "webkitIsFullScreen", () => fullscreenState.active);
+              setGetter(document, "webkitIsFullScreen", () => fullscreenState.active);
+              setGetter(Document.prototype, "mozFullScreen", () => fullscreenState.active);
+              setGetter(document, "mozFullScreen", () => fullscreenState.active);
+              setGetter(Document.prototype, "msFullscreenElement", () =>
+                fullscreenState.active ? fullscreenState.el : null
+              );
+              setGetter(document, "msFullscreenElement", () => (fullscreenState.active ? fullscreenState.el : null));
+              setConst(Document.prototype, "fullscreen", true);
+              setConst(document, "fullscreen", true);
 
               const spoofState = () => {
                 fullscreenState.active = true;
@@ -346,6 +362,63 @@
             }
           };
           spoofViewport();
+
+          const spoofRects = () => {
+            try {
+              const width = screen?.width || window.innerWidth || 1920;
+              const height = screen?.height || window.innerHeight || 1080;
+              const makeRect = () => ({
+                x: 0,
+                y: 0,
+                top: 0,
+                left: 0,
+                right: width,
+                bottom: height,
+                width,
+                height,
+                toJSON() {
+                  return {
+                    x: 0,
+                    y: 0,
+                    top: 0,
+                    left: 0,
+                    right: width,
+                    bottom: height,
+                    width,
+                    height
+                  };
+                }
+              });
+              const patchRect = (obj) => {
+                if (!obj) return;
+                try {
+                  Object.defineProperty(obj, "getBoundingClientRect", {
+                    configurable: true,
+                    enumerable: false,
+                    value: () => makeRect()
+                  });
+                } catch (_) {
+                  /* ignore */
+                }
+              };
+              patchRect(document.documentElement);
+              patchRect(document.body);
+            } catch (_) {
+              /* ignore */
+            }
+          };
+          spoofRects();
+
+          const keepSpoofing = () => {
+            try {
+              spoofFullscreen();
+              spoofViewport();
+              spoofRects();
+            } catch (_) {
+              /* ignore */
+            }
+          };
+          setInterval(keepSpoofing, 500);
 
           setConst(Document.prototype, "hidden", false);
           setConst(document, "hidden", false);
