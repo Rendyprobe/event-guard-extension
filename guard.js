@@ -509,7 +509,7 @@
                 ".cta-button",
                 ".root-component-container",
                 ".test-theme-waiting",
-                ".w-full.h-full",
+                ".w-full.h.full",
                 ".app-content",
                 ".flex.flex-row.w-full.h-full",
                 "[class*=fullscreen]",
@@ -519,51 +519,67 @@
                 "[data-qa*=full]",
                 "[data-qa*=screen]"
               ];
-              const nodes = new Set();
-              selectors.forEach((sel) => document.querySelectorAll(sel).forEach((el) => nodes.add(el)));
 
-              const shouldHide = (el) => {
-                const txt = (el.innerText || "").toLowerCase();
-                if (txt.includes("layar penuh")) return true;
-                if (txt.includes("full screen")) return true;
-                if (txt.includes("fullscreen")) return true;
-                return false;
+              const processDoc = (doc) => {
+                const nodes = new Set();
+                selectors.forEach((sel) => doc.querySelectorAll(sel).forEach((el) => nodes.add(el)));
+
+                const shouldHide = (el) => {
+                  const txt = (el.innerText || "").toLowerCase();
+                  if (txt.includes("layar penuh")) return true;
+                  if (txt.includes("full screen")) return true;
+                  if (txt.includes("fullscreen")) return true;
+                  return false;
+                };
+
+                const visit = (root) => {
+                  if (!root) return;
+                  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+                  let node = walker.currentNode;
+                  while (node) {
+                    const el = node;
+                    if (shouldHide(el)) nodes.add(el);
+                    if (el.shadowRoot) visit(el.shadowRoot);
+                    node = walker.nextNode();
+                  }
+                };
+                visit(doc);
+
+                let clicked = false;
+                Array.from(nodes).forEach((el) => {
+                  hideNode(el);
+                  hideChain(el, 2);
+                  const txt = (el.innerText || "").toLowerCase();
+                  if (!clicked && el.tagName === "BUTTON" && txt.includes("layar penuh")) {
+                    try {
+                      el.click();
+                      clicked = true;
+                    } catch (_) {
+                      /* ignore */
+                    }
+                  }
+                  const parent = el.parentElement;
+                  if (parent && (parent.className || "").toString().includes("modal")) {
+                    hideChain(parent, 2);
+                    if (parent.parentElement) hideChain(parent.parentElement, 1);
+                  }
+                });
               };
 
-              const visit = (root) => {
-                if (!root) return;
-                const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
-                let node = walker.currentNode;
-                while (node) {
-                  const el = node;
-                  if (shouldHide(el)) nodes.add(el);
-                  if (el.shadowRoot) visit(el.shadowRoot);
-                  node = walker.nextNode();
-                }
-              };
-              visit(document);
-
-              let clicked = false;
-              Array.from(nodes).forEach((el) => {
-                hideNode(el);
-                hideChain(el, 2);
-                const txt = (el.innerText || "").toLowerCase();
-                if (!clicked && el.tagName === "BUTTON" && txt.includes("layar penuh")) {
+              const recurseFrames = (doc) => {
+                processDoc(doc);
+                const iframes = Array.from(doc.querySelectorAll("iframe"));
+                iframes.forEach((frame) => {
                   try {
-                    el.click();
-                    clicked = true;
+                    const childDoc = frame.contentDocument;
+                    if (childDoc) recurseFrames(childDoc);
                   } catch (_) {
-                    /* ignore */
+                    /* ignore cross-origin */
                   }
-                }
-                const parent = el.parentElement;
-                if (parent && (parent.className || "").toString().includes("modal")) {
-                  hideChain(parent, 2);
-                  if (parent.parentElement) {
-                    hideChain(parent.parentElement, 1);
-                  }
-                }
-              });
+                });
+              };
+
+              recurseFrames(document);
             } catch (_) {
               /* ignore */
             }
