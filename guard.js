@@ -216,6 +216,14 @@
 
       const applyForceVisible = () => {
         try {
+          const fullscreenSelectors = [
+            ":fullscreen",
+            ":-webkit-full-screen",
+            ":-moz-full-screen",
+            ":-ms-fullscreen",
+            ":full-screen"
+          ];
+
           const spoofFullscreen = () => {
             try {
               const fakeElement = document.documentElement || document.body || document;
@@ -242,6 +250,12 @@
               setGetter(document, "msFullscreenElement", () => (fullscreenState.active ? fullscreenState.el : null));
               setConst(Document.prototype, "fullscreen", true);
               setConst(document, "fullscreen", true);
+              setConst(Document.prototype, "webkitFullscreenEnabled", true);
+              setConst(document, "webkitFullscreenEnabled", true);
+              setConst(Document.prototype, "mozFullScreenEnabled", true);
+              setConst(document, "mozFullScreenEnabled", true);
+              setConst(Document.prototype, "msFullscreenEnabled", true);
+              setConst(document, "msFullscreenEnabled", true);
 
               const spoofState = () => {
                 fullscreenState.active = true;
@@ -409,11 +423,86 @@
           };
           spoofRects();
 
+          const spoofSelectors = () => {
+            try {
+              const includesFS = (sel) =>
+                typeof sel === "string" && fullscreenSelectors.some((s) => sel.includes(s));
+              const nativeMatches =
+                Element.prototype.matches ||
+                Element.prototype.msMatchesSelector ||
+                Element.prototype.webkitMatchesSelector;
+              if (nativeMatches) {
+                const fakeMatches = function (sel) {
+                  if (includesFS(sel)) return true;
+                  return nativeMatches.call(this, sel);
+                };
+                lockMethod(Element.prototype, "matches", fakeMatches);
+                lockMethod(Element.prototype, "webkitMatchesSelector", fakeMatches);
+                lockMethod(Element.prototype, "msMatchesSelector", fakeMatches);
+              }
+              const nativeQS = Document.prototype.querySelector;
+              const nativeQSA = Document.prototype.querySelectorAll;
+              const nativeElQS = Element.prototype.querySelector;
+              const nativeElQSA = Element.prototype.querySelectorAll;
+              const fsQS = function (sel) {
+                if (includesFS(sel)) return document.documentElement || document.body || document;
+                return nativeQS.call(this, sel);
+              };
+              const fsQSA = function (sel) {
+                if (includesFS(sel)) {
+                  const el = document.documentElement || document.body || document;
+                  return [el];
+                }
+                return nativeQSA.call(this, sel);
+              };
+              if (nativeQS) {
+                lockMethod(Document.prototype, "querySelector", fsQS);
+                lockMethod(Document.prototype, "querySelectorAll", fsQSA);
+              }
+              if (nativeElQS) {
+                lockMethod(Element.prototype, "querySelector", fsQS);
+              }
+              if (nativeElQSA) {
+                lockMethod(Element.prototype, "querySelectorAll", fsQSA);
+              }
+            } catch (_) {
+              /* ignore */
+            }
+          };
+          spoofSelectors();
+
+          const nudgeEvents = () => {
+            try {
+              window.dispatchEvent(new Event("resize"));
+              document.dispatchEvent(new Event("fullscreenchange"));
+            } catch (_) {
+              /* ignore */
+            }
+          };
+
+          const removeFullscreenPrompt = () => {
+            try {
+              const candidates = Array.from(document.querySelectorAll("div,section,article,button"));
+              candidates.forEach((el) => {
+                const txt = (el.innerText || "").toLowerCase();
+                if (txt.includes("layar penuh")) {
+                  el.style.display = "none";
+                }
+              });
+            } catch (_) {
+              /* ignore */
+            }
+          };
+          removeFullscreenPrompt();
+
           const keepSpoofing = () => {
             try {
               spoofFullscreen();
               spoofViewport();
               spoofRects();
+              spoofSelectors();
+              removeFullscreenPrompt();
+              nudgeEvents();
             } catch (_) {
               /* ignore */
             }
