@@ -141,6 +141,18 @@
           /* ignore */
         }
       };
+      const setGetter = (target, prop, getter) => {
+        try {
+          Object.defineProperty(target, prop, {
+            configurable: true,
+            enumerable: false,
+            get: getter,
+            set: () => undefined
+          });
+        } catch (_) {
+          /* ignore */
+        }
+      };
 
       const lockMethod = (obj, prop, fn) => {
         try {
@@ -207,13 +219,22 @@
           const spoofFullscreen = () => {
             try {
               const fakeElement = document.documentElement || document.body || document;
+              const fullscreenState = { el: fakeElement, active: true };
+              setGetter(Document.prototype, "fullscreenElement", () =>
+                fullscreenState.active ? fullscreenState.el : null
+              );
+              setGetter(document, "fullscreenElement", () => (fullscreenState.active ? fullscreenState.el : null));
+              setConst(Document.prototype, "fullscreenEnabled", true);
+              setConst(document, "fullscreenEnabled", true);
+
               const spoofState = () => {
-                setConst(Document.prototype, "fullscreenEnabled", true);
-                setConst(document, "fullscreenEnabled", true);
-                setConst(Document.prototype, "fullscreenElement", fakeElement);
-                setConst(document, "fullscreenElement", fakeElement);
+                fullscreenState.active = true;
                 try {
-                  document.dispatchEvent(new Event("fullscreenchange"));
+                  const evt = new Event("fullscreenchange");
+                  document.dispatchEvent(evt);
+                  if (fullscreenState.el && fullscreenState.el.dispatchEvent) {
+                    fullscreenState.el.dispatchEvent(evt);
+                  }
                 } catch (_) {
                   /* ignore */
                 }
@@ -225,6 +246,7 @@
                 "msRequestFullscreen"
               ];
               const fakeRequest = function () {
+                fullscreenState.el = this || fakeElement;
                 spoofState();
                 return Promise.resolve();
               };
@@ -238,7 +260,7 @@
               });
               const exitProps = ["exitFullscreen", "webkitExitFullscreen", "mozCancelFullScreen", "msExitFullscreen"];
               const fakeExit = () => {
-                spoofState();
+                spoofState(); // keep state active to appear still fullscreen
                 return Promise.resolve();
               };
               exitProps.forEach((p) => {
@@ -279,6 +301,46 @@
               setScreen("availWidth", width);
               setScreen("height", height);
               setScreen("width", width);
+              const vvTarget = window.visualViewport || {
+                width: width,
+                height: height,
+                scale: 1
+              };
+              const spoofedVV = new Proxy(vvTarget, {
+                get(obj, prop) {
+                  if (prop === "height") return height;
+                  if (prop === "width") return width;
+                  if (prop === "scale") return 1;
+                  return obj[prop];
+                }
+              });
+              setConst(window, "visualViewport", spoofedVV);
+              const docEl = document.documentElement;
+              if (docEl) {
+                setGetter(docEl, "clientHeight", () => height);
+                setGetter(docEl, "clientWidth", () => width);
+              }
+              setGetter(document, "clientHeight", () => height);
+              setGetter(document, "clientWidth", () => width);
+              const nativeMatchMedia = window.matchMedia ? window.matchMedia.bind(window) : null;
+              if (nativeMatchMedia) {
+                const spoofedMatchMedia = (query) => {
+                  if (typeof query === "string" && query.includes("display-mode: fullscreen")) {
+                    return {
+                      matches: true,
+                      media: query,
+                      onchange: null,
+                      addListener: () => undefined,
+                      removeListener: () => undefined,
+                      addEventListener: () => undefined,
+                      removeEventListener: () => undefined,
+                      dispatchEvent: () => false
+                    };
+                  }
+                  return nativeMatchMedia(query);
+                };
+                lockMethod(window, "matchMedia", spoofedMatchMedia);
+              }
             } catch (_) {
               /* ignore */
             }
