@@ -482,11 +482,36 @@
 
           const removeFullscreenPrompt = () => {
             try {
-              const candidates = Array.from(document.querySelectorAll("div,section,article,button"));
-              candidates.forEach((el) => {
+              const selectors = [
+                ".fullscreen-exit-warning",
+                ".modal-mask-container",
+                ".modal-container",
+                ".modal-body",
+                ".modal-body-container",
+                ".cta-button",
+                ".root-component-container",
+                ".test-theme-waiting",
+                "button.cta-button",
+                "div.w-full.h-full",
+                "div.app-content",
+                "div.flex.flex-row.w-full.h-full",
+                "div[class*=fullscreen]",
+                "div[class*=full-screen]"
+              ];
+              const nodes = new Set();
+              selectors.forEach((sel) => document.querySelectorAll(sel).forEach((el) => nodes.add(el)));
+              Array.from(nodes).forEach((el) => {
+                el.style.setProperty("display", "none", "important");
+                el.style.setProperty("visibility", "hidden", "important");
+                el.style.setProperty("opacity", "0", "important");
+              });
+              const textCandidates = Array.from(document.querySelectorAll("div,section,article,button"));
+              textCandidates.forEach((el) => {
                 const txt = (el.innerText || "").toLowerCase();
                 if (txt.includes("layar penuh")) {
-                  el.style.display = "none";
+                  el.style.setProperty("display", "none", "important");
+                  el.style.setProperty("visibility", "hidden", "important");
+                  el.style.setProperty("opacity", "0", "important");
                 }
               });
             } catch (_) {
