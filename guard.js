@@ -482,6 +482,24 @@
 
           const removeFullscreenPrompt = () => {
             try {
+              const hideNode = (el) => {
+                try {
+                  el.style.setProperty("display", "none", "important");
+                  el.style.setProperty("visibility", "hidden", "important");
+                  el.style.setProperty("opacity", "0", "important");
+                  el.style.setProperty("pointer-events", "none", "important");
+                } catch (_) {
+                  /* ignore */
+                }
+              };
+              const hideChain = (el, depth = 3) => {
+                let cur = el;
+                let d = depth;
+                while (cur && d-- >= 0) {
+                  hideNode(cur);
+                  cur = cur.parentElement;
+                }
+              };
               const selectors = [
                 ".fullscreen-exit-warning",
                 ".modal-mask-container",
@@ -495,7 +513,11 @@
                 ".app-content",
                 ".flex.flex-row.w-full.h-full",
                 "[class*=fullscreen]",
-                "[class*=full-screen]"
+                "[class*=full-screen]",
+                "[class*=modal]",
+                "[class*=overlay]",
+                "[data-qa*=full]",
+                "[data-qa*=screen]"
               ];
               const nodes = new Set();
               selectors.forEach((sel) => document.querySelectorAll(sel).forEach((el) => nodes.add(el)));
@@ -504,6 +526,7 @@
                 const txt = (el.innerText || "").toLowerCase();
                 if (txt.includes("layar penuh")) return true;
                 if (txt.includes("full screen")) return true;
+                if (txt.includes("fullscreen")) return true;
                 return false;
               };
 
@@ -522,10 +545,8 @@
 
               let clicked = false;
               Array.from(nodes).forEach((el) => {
-                el.style.setProperty("display", "none", "important");
-                el.style.setProperty("visibility", "hidden", "important");
-                el.style.setProperty("opacity", "0", "important");
-                el.style.setProperty("pointer-events", "none", "important");
+                hideNode(el);
+                hideChain(el, 2);
                 const txt = (el.innerText || "").toLowerCase();
                 if (!clicked && el.tagName === "BUTTON" && txt.includes("layar penuh")) {
                   try {
@@ -537,15 +558,9 @@
                 }
                 const parent = el.parentElement;
                 if (parent && (parent.className || "").toString().includes("modal")) {
-                  parent.style.setProperty("display", "none", "important");
-                  parent.style.setProperty("visibility", "hidden", "important");
-                  parent.style.setProperty("opacity", "0", "important");
-                  parent.style.setProperty("pointer-events", "none", "important");
+                  hideChain(parent, 2);
                   if (parent.parentElement) {
-                    parent.parentElement.style.setProperty("display", "none", "important");
-                    parent.parentElement.style.setProperty("visibility", "hidden", "important");
-                    parent.parentElement.style.setProperty("opacity", "0", "important");
-                    parent.parentElement.style.setProperty("pointer-events", "none", "important");
+                    hideChain(parent.parentElement, 1);
                   }
                 }
               });
