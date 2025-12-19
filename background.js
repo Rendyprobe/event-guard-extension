@@ -28,6 +28,7 @@ const DEFAULT_CONFIG = {
   blockWebSocket: true,
   blockWorkers: true,
   blockEvents: HARD_BLOCK_EVENTS,
+   stripFullscreenCode: true,
   log: false
 };
 

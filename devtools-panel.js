@@ -25,6 +25,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       forceVisible: true,
       blockOutbound: stealthEl.checked,
       blockWebSocket: stealthEl.checked,
+      stripFullscreenCode: true,
       log: logEl.checked,
       blockEvents: []
     };

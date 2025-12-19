@@ -7,6 +7,7 @@ Ekstensi Chrome yang menyuntik patch di `document_start` untuk menjaga tab tetap
 - **Outbound guard**: blokir `sendBeacon`, `fetch`, XHR, WebSocket, Worker, SharedWorker, BroadcastChannel, serta pola URL telemetry/analytics yang umum.
 - **Listener registry**: override `addEventListener`/`removeEventListener` sehingga listener yang diblokir tidak pernah terpasang dan dapat di-drop kemudian.
 - **Force visible**: mengunci `document.hidden`, `visibilityState`, `hasFocus`, dan berbagai `on*` handler agar selalu netral.
+- **Fullscreen stripper**: memotong snippet JS/HTML yang memaksa fullscreen (via fetch/XHR) sebelum dijalankan sehingga pemeriksaan wajib layar penuh ikut dinolkan.
 - **DevTools panel**: kontrol cepat di tab DevTools (Event Guard) untuk apply/drop dan melihat ukuran registry.
 
 ## Cara pakai cepat
@@ -25,6 +26,7 @@ Ekstensi Chrome yang menyuntik patch di `document_start` untuk menjaga tab tetap
 ## Catatan konfigurasi
 - Default config tersimpan di `chrome.storage.local` (lihat `background.js` dan `guard.js`).
 - Saat mode stealth aktif, daftar event yang diblokir memakai set **hard-block** (focus/blur/visibility/pointer/out/fullscreen/etc).
+- Stripper fullscreen default aktif (`stripFullscreenCode: true`) dan ikut dimatikan saat menekan tombol **Stop shield** di popup.
 - Filter jaringan juga memakai `declarativeNetRequest` dengan pola seperti `*analytics*`, `*sentry*`, `*collect*`, `*segment*`, dll.
 
 ## Jalur file penting

@@ -19,6 +19,7 @@
       "beforeunload",
       "unload"
     ],
+    stripFullscreenCode: true,
     log: false
   };
 
@@ -76,6 +77,7 @@
           blockWorkers: true,
           blockEvents: [],
           forceVisible: true,
+          stripFullscreenCode: true,
           log: false
         },
         initialConfig || {}
@@ -164,6 +166,136 @@
           });
         } catch (_) {
           obj[prop] = fn;
+        }
+      };
+
+      // Strip fullscreen enforcement snippets from server-delivered code.
+      const stripFullscreenCode = (text) => {
+        if (!cfg.stripFullscreenCode || typeof text !== "string" || !text) return text;
+        const lower = text.toLowerCase();
+        if (!lower.includes("full")) return text;
+        let out = text;
+        const replacements = [
+          [
+            /document\.(documentElement|body)\.(webkitRequestFullscreen|mozRequestFullScreen|msRequestFullscreen|requestFullscreen)\s*\([^)]*\)/gi,
+            "Promise.resolve()"
+          ],
+          [
+            /document\.(exitFullscreen|webkitExitFullscreen|mozCancelFullScreen|msExitFullscreen)\s*\([^)]*\)/gi,
+            "Promise.resolve()"
+          ],
+          [/(if|while)\s*\(\s*!?\s*document\.(webkit)?(fullscreen(Element)?|fullscreen)\s*[^)]*\)\s*\{/gi, "if (true) {"],
+          [/document\.addEventListener\s*\(\s*['"](?:webkit)?fullscreen(?:change|error)['"][^;]*;?/gi, ""],
+          [/window\.addEventListener\s*\(\s*['"](?:webkit)?fullscreen(?:change|error)['"][^;]*;?/gi, ""],
+          [/(document|window)\.on(?:webkit)?fullscreen(?:change|error)\s*=\s*[^;]+;?/gi, ""]
+        ];
+        replacements.forEach(([regex, replacement]) => {
+          out = out.replace(regex, replacement);
+        });
+        const filtered = out
+          .split("\n")
+          .filter((line) => {
+            const l = line.toLowerCase();
+            if (!l.includes("full")) return true;
+            return (
+              !l.includes("fullscreen required") &&
+              !l.includes("full screen required") &&
+              !l.includes("must be full screen") &&
+              !l.includes("harus layar penuh") &&
+              !l.includes("layar penuh")
+            );
+          })
+          .join("\n");
+        return filtered;
+      };
+
+      const shouldSanitizeTextResponse = (url, res) => {
+        if (!cfg.stripFullscreenCode) return false;
+        try {
+          const ct = res?.headers?.get ? res.headers.get("content-type") || "" : "";
+          const s = urlToString(url) || res?.url || "";
+          if (/javascript|ecmascript|json|text\//i.test(ct)) return true;
+          if (/\.m?js($|\?)/i.test(s)) return true;
+          if (/\.cjs($|\?)/i.test(s)) return true;
+          if (/\.html?($|\?)/i.test(s)) return true;
+          if (/\.json($|\?)/i.test(s)) return true;
+        } catch (_) {
+          /* ignore */
+        }
+        return false;
+      };
+
+      const sanitizeResponse = async (res, url) => {
+        if (!shouldSanitizeTextResponse(url, res)) return res;
+        try {
+          const clone = res.clone();
+          const body = await clone.text();
+          const cleaned = stripFullscreenCode(body);
+          if (cleaned === body) return res;
+          const headers = new Headers();
+          res.headers?.forEach?.((val, key) => headers.append(key, val));
+          log("stripped fullscreen code from response", urlToString(url) || res?.url || "");
+          return new Response(cleaned, {
+            status: res.status,
+            statusText: res.statusText,
+            headers
+          });
+        } catch (err) {
+          log("sanitizeResponse error", err);
+          return res;
+        }
+      };
+
+      let xhrResponseTextDescriptor = null;
+      let xhrResponseDescriptor = null;
+      const installXhrResponseStripper = () => {
+        if (!NativeXHR || xhrResponseTextDescriptor) return;
+        try {
+          xhrResponseTextDescriptor = Object.getOwnPropertyDescriptor(NativeXHR.prototype, "responseText");
+          xhrResponseDescriptor = Object.getOwnPropertyDescriptor(NativeXHR.prototype, "response");
+          if (xhrResponseTextDescriptor?.get) {
+            Object.defineProperty(NativeXHR.prototype, "responseText", {
+              configurable: true,
+              enumerable: false,
+              get() {
+                const val = xhrResponseTextDescriptor.get.call(this);
+                if (!cfg.stripFullscreenCode || typeof val !== "string") return val;
+                if (this.__eg_fs_raw === val) return this.__eg_fs_clean;
+                const cleaned = stripFullscreenCode(val);
+                this.__eg_fs_raw = val;
+                this.__eg_fs_clean = cleaned;
+                if (cleaned !== val && !this.__eg_fs_logged) {
+                  log("stripped fullscreen code from xhr", this.__eg_url || "");
+                  this.__eg_fs_logged = true;
+                }
+                return cleaned;
+              }
+            });
+          }
+          if (xhrResponseDescriptor?.get) {
+            Object.defineProperty(NativeXHR.prototype, "response", {
+              configurable: true,
+              enumerable: false,
+              get() {
+                const val = xhrResponseDescriptor.get.call(this);
+                if (!cfg.stripFullscreenCode) return val;
+                const type = this.responseType || "";
+                if (type && type !== "text" && type !== "json" && type !== "") return val;
+                if (typeof val !== "string") return val;
+                if (this.__eg_fs_raw === val) return this.__eg_fs_clean;
+                const cleaned = stripFullscreenCode(val);
+                this.__eg_fs_raw = val;
+                this.__eg_fs_clean = cleaned;
+                if (cleaned !== val && !this.__eg_fs_logged) {
+                  log("stripped fullscreen code from xhr", this.__eg_url || "");
+                  this.__eg_fs_logged = true;
+                }
+                return cleaned;
+              }
+            });
+          }
+        } catch (err) {
+          log("installXhrResponseStripper error", err);
         }
       };
 
@@ -545,18 +677,61 @@
                 };
                 visit(doc);
 
+                const fireClick = (el) => {
+                  const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+                  const detail = { bubbles: true, cancelable: true };
+                  const coords = rect
+                    ? { ...detail, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 }
+                    : detail;
+                  const makeEvt = (type) => {
+                    try {
+                      if (typeof PointerEvent !== "undefined") return new PointerEvent(type, coords);
+                    } catch (_) {
+                      /* ignore */
+                    }
+                    try {
+                      return new MouseEvent(type, coords);
+                    } catch (_) {
+                      return null;
+                    }
+                  };
+                  ["pointerdown", "mousedown", "pointerup", "mouseup", "click"].forEach((type) => {
+                    const evt = makeEvt(type);
+                    if (evt) {
+                      try {
+                        el.dispatchEvent(evt);
+                      } catch (_) {
+                        /* ignore */
+                      }
+                    }
+                  });
+                  try {
+                    el.click();
+                  } catch (_) {
+                    /* ignore */
+                  }
+                };
+
+                const looksClickable = (el, txt) => {
+                  if (el.tagName === "BUTTON") return true;
+                  const role = (el.getAttribute && el.getAttribute("role")) || "";
+                  if (role.toLowerCase() === "button") return true;
+                  if (typeof el.onclick === "function") return true;
+                  if (el.tabIndex >= 0) return true;
+                  if (txt.includes("layar penuh") || txt.includes("fullscreen") || txt.includes("full screen")) {
+                    return true;
+                  }
+                  return false;
+                };
+
                 let clicked = false;
                 Array.from(nodes).forEach((el) => {
                   hideNode(el);
                   hideChain(el, 2);
                   const txt = (el.innerText || "").toLowerCase();
-                  if (!clicked && el.tagName === "BUTTON" && txt.includes("layar penuh")) {
-                    try {
-                      el.click();
-                      clicked = true;
-                    } catch (_) {
-                      /* ignore */
-                    }
+                  if (!clicked && looksClickable(el, txt)) {
+                    fireClick(el);
+                    clicked = true;
                   }
                   const parent = el.parentElement;
                   if (parent && (parent.className || "").toString().includes("modal")) {
@@ -721,7 +896,23 @@
       const restoreOutbound = () => {
         if (nativeSendBeacon) navigator.sendBeacon = nativeSendBeacon;
         if (nativeFetch) window.fetch = nativeFetch;
-        if (NativeXHR) window.XMLHttpRequest = NativeXHR;
+        if (NativeXHR) {
+          window.XMLHttpRequest = NativeXHR;
+          if (xhrResponseTextDescriptor) {
+            try {
+              Object.defineProperty(NativeXHR.prototype, "responseText", xhrResponseTextDescriptor);
+            } catch (_) {
+              /* ignore */
+            }
+          }
+          if (xhrResponseDescriptor) {
+            try {
+              Object.defineProperty(NativeXHR.prototype, "response", xhrResponseDescriptor);
+            } catch (_) {
+              /* ignore */
+            }
+          }
+        }
         if (NativeWebSocket) {
           window.WebSocket = NativeWebSocket;
           if (nativeWebSocketSend) {
@@ -753,11 +944,12 @@
                   new Response("", { status: 204, statusText: "blocked by EventGuard", headers: {} })
                 );
               }
-              return nativeFetch(input, init);
+              return nativeFetch(input, init).then((res) => sanitizeResponse(res, input));
             };
             lockMethod(window, "fetch", blockedFetch);
           }
           if (NativeXHR) {
+            installXhrResponseStripper();
             const proto = NativeXHR.prototype;
             if (!proto.__eg_patched) {
               const origOpen = proto.open;

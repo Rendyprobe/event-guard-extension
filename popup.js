@@ -21,6 +21,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       forceVisible: true,
       blockOutbound: stealthEl.checked,
       blockWebSocket: stealthEl.checked,
+      stripFullscreenCode: true,
       log: logEl.checked,
       blockEvents: [] // server will merge defaults
     };
@@ -48,6 +49,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       blockOutbound: false,
       blockWebSocket: false,
       blockWorkers: false,
+      stripFullscreenCode: false,
       log: false,
       blockEvents: []
     };
