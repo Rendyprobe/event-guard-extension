@@ -43,6 +43,23 @@ const BLOCK_URL_PATTERNS = [
   "*segment*"
 ];
 
+const CHEATNET_URL = "https://cheatnetwork.eu/services/quizizz";
+const cheatnetQueue = {};
+
+const sanitizeCheatCode = (raw) => {
+  let t = (raw || "").trim();
+  if (!t) return "";
+  if (t.toLowerCase().startsWith("javascript:")) {
+    t = t.slice("javascript:".length);
+    try {
+      t = decodeURIComponent(t);
+    } catch (_) {
+      /* ignore */
+    }
+  }
+  return t;
+};
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.set({ eventGuardConfig: DEFAULT_CONFIG });
   applyNetRules();
@@ -95,6 +112,93 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
     sendResponse({ ok: true });
     return true;
+  }
+
+  if (msg?.type === "CHEATNET_OPEN") {
+    const code = (msg.code || "").toString().trim();
+    const originTabId = msg.originTabId || sender?.tab?.id;
+    if (!code) {
+      sendResponse({ ok: false, error: "Kode kosong" });
+      return true;
+    }
+    chrome.tabs.create({ url: CHEATNET_URL, active: false }, (tab) => {
+      if (tab?.id) {
+        cheatnetQueue[tab.id] = { code, originTabId };
+        sendResponse({ ok: true, tabId: tab.id });
+      } else {
+        sendResponse({ ok: false, error: "Gagal membuka tab" });
+      }
+    });
+    return true;
+  }
+
+  if (msg?.type === "CHEATNET_READY") {
+    const tabId = sender?.tab?.id;
+    const queue = tabId ? cheatnetQueue[tabId] : null;
+    if (tabId && queue) {
+      chrome.tabs.sendMessage(tabId, { type: "CHEATNET_FILL", code: queue.code }, () => {
+        void chrome.runtime.lastError;
+      });
+      setTimeout(() => {
+        chrome.tabs.sendMessage(tabId, { type: "CHEATNET_FILL", code: queue.code }, () => {
+          void chrome.runtime.lastError;
+        });
+      }, 1500);
+      setTimeout(() => {
+        chrome.tabs.sendMessage(tabId, { type: "CHEATNET_FILL", code: queue.code }, () => {
+          void chrome.runtime.lastError;
+        });
+      }, 3000);
+    }
+    sendResponse({ ok: true });
+    return true;
+  }
+
+  if (msg?.type === "CHEATNET_CODE") {
+    const tabId = sender?.tab?.id;
+    const queue = tabId ? cheatnetQueue[tabId] : null;
+    const code = sanitizeCheatCode(msg.code);
+    if (queue?.originTabId && code) {
+      chrome.scripting.executeScript(
+        {
+          target: { tabId: queue.originTabId },
+          args: [code],
+          world: "MAIN",
+          func: (payload) => {
+            try {
+              console.info("[EventGuard] executing cheat payload", payload.slice(0, 80));
+              (0, eval)(payload);
+            } catch (err) {
+              console.error("EventGuard cheat exec failed", err);
+            }
+          }
+        },
+        () => void chrome.runtime.lastError
+      );
+      delete cheatnetQueue[tabId];
+    }
+    sendResponse({ ok: true });
+    return true;
+  }
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!cheatnetQueue[tabId]) return;
+  if (changeInfo.status === "complete" && tab.url && tab.url.startsWith(CHEATNET_URL)) {
+    chrome.tabs.sendMessage(tabId, { type: "CHEATNET_FILL", code: cheatnetQueue[tabId].code }, () => {
+      void chrome.runtime.lastError;
+    });
+    setTimeout(() => {
+      chrome.tabs.sendMessage(tabId, { type: "CHEATNET_FILL", code: cheatnetQueue[tabId].code }, () => {
+        void chrome.runtime.lastError;
+      });
+    }, 1500);
+  }
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (cheatnetQueue[tabId]) {
+    delete cheatnetQueue[tabId];
   }
 });
 

@@ -9,6 +9,7 @@ Ekstensi Chrome yang menyuntik patch di `document_start` untuk menjaga tab tetap
 - **Force visible**: mengunci `document.hidden`, `visibilityState`, `hasFocus`, dan berbagai `on*` handler agar selalu netral.
 - **Fullscreen stripper**: memotong snippet JS/HTML yang memaksa fullscreen (via fetch/XHR) sebelum dijalankan sehingga pemeriksaan wajib layar penuh ikut dinolkan.
 - **DevTools panel**: kontrol cepat di tab DevTools (Event Guard) untuk apply/drop dan melihat ukuran registry.
+- **CheatNetwork helper**: tombol **CN** di popup untuk membuka `cheatnetwork.eu/services/quizizz`, auto-isi kode Quizizz, dan lompat ke halaman autoanswer.
 
 ## Cara pakai cepat
 1) **Pasang secara lokal**
@@ -19,6 +20,7 @@ Ekstensi Chrome yang menyuntik patch di `document_start` untuk menjaga tab tetap
    - Klik ikon Event Guard.
    - Pilih *Stealth shield* (default aktif) dan *Log intercepted adds* jika perlu logging.
    - `Apply` untuk terapkan, `Drop listeners` untuk melepas yang tercatat, `Stop shield` untuk menonaktifkan semua proteksi.
+   - Isi `Kode Quizizz` lalu tekan **CN** untuk otomatis buka CheatNetwork di background, isi kode, klik Get Answers, lompat ke autoanswer, dan mengeksekusi script console di tab Quizizz aktif.
 3) **Gunakan DevTools**
    - Buka DevTools → tab **Event Guard**.
    - Toggle opsi, `Apply`/`Drop tracked listeners`, atau `Show registry size` untuk melihat jumlah listener aktif yang terdaftar.

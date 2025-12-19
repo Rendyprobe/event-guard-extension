@@ -29,6 +29,12 @@
       "run_at": "document_start",
       "all_frames": true,
       "match_about_blank": true
+    },
+    {
+      "matches": ["https://cheatnetwork.eu/services/quizizz*"],
+      "js": ["cheatnetwork.js"],
+      "run_at": "document_idle",
+      "all_frames": false
     }
   ],
   "devtools_page": "devtools.html"

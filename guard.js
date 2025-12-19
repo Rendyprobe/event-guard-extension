@@ -1,4 +1,25 @@
 (() => {
+  // Allow right-click even if page tries to block.
+  (() => {
+    const allowContext = (e) => {
+      try {
+        e.stopImmediatePropagation();
+        e.stopPropagation();
+        e.returnValue = true;
+      } catch (_) {
+        /* ignore */
+      }
+    };
+    const unlock = () => {
+      window.oncontextmenu = null;
+      document.oncontextmenu = null;
+    };
+    document.addEventListener("contextmenu", allowContext, true);
+    window.addEventListener("contextmenu", allowContext, true);
+    window.addEventListener("load", unlock, true);
+    setInterval(unlock, 500);
+  })();
+
   const DEFAULT_CONFIG = {
     stealth: true,
     forceVisible: true,
@@ -82,6 +103,13 @@
         },
         initialConfig || {}
       );
+
+      const host = (location && location.hostname) || "";
+      if (host.includes("cheatnetwork.eu")) {
+        cfg.blockOutbound = false;
+        cfg.blockWebSocket = false;
+        cfg.blockWorkers = false;
+      }
 
       const HARD_BLOCK_EVENTS = [
         "visibilitychange",
